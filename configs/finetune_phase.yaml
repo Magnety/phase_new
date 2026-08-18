@@ -1,0 +1,371 @@
+# PHASE fine-tuning configuration. Common data, runtime and optimization
+# values intentionally follow the refine baseline; PHASE-only objectives and
+# anatomical safeguards remain explicit.
+seed: 2026
+
+# Seven configurable endpoints (five binary, one four-class, one censored
+# survival endpoint). Set active to any non-empty subset; missing labels are
+# masked independently per endpoint and never remove labels from other tasks.
+tasks:
+  active: [pCR, HER2, ER, PR, HR, molecular_subtype, survival]
+  molecular_subtype_classes: ["0", "1", "2", "3"]
+
+data:
+  manifest_path: /home/ubuntu/liuyiyao1/multimodal_dataset/phase_source_manifest_full_v4.csv
+  dataset_root: /home/ubuntu/liuyiyao1/multimodal_dataset
+  target_shape: [64, 128, 128]
+  spatial_preprocessing: trilinear_resample
+  preprocessed: false
+  max_phases: 8
+  modalities: [DCE, T1, T2, DWI, ADC]
+  relative_time_unit: seconds
+  default_phase_interval_seconds: 90.0
+  fallback_time_confidence: 0.35
+  normalization_mode: dce_cross_phase
+  normalization_samples: 262144
+  cache:
+    enabled: true
+    dir: /home/ubuntu/liuyiyao1/multimodal_dataset/.phase_independent_cache_64x128x128
+    sample_dir: /home/ubuntu/liuyiyao1/multimodal_dataset/.phase_independent_cache_64x128x128/samples
+    after_normalize: true
+    npy_mmap_mode: "r"
+    warmup_missing_before_training: true
+    warmup_log_interval: 10
+    warmup_workers: 4
+    warmup_timeout_hours: 24.0
+    minimum_free_gib: 5.0
+    migrate_legacy_cache: true
+  include_datasets: []
+  exclude_datasets: []
+  split_strategy:
+    mode: by_ratio
+    train_ratio: 0.70
+    val_ratio: 0.15
+    seed: 2026
+    # Match refine: retain its SHA1-hash test patients, then stratify only the
+    # original train+validation pool by centre × primary task state.
+    stratify_train_val_only: true
+    stratify_by_dataset: true
+    stratify_task: pCR
+  ftv_segmentation:
+    enabled: true
+    surface_depth_fraction: 0.20
+    surface_min_depth_voxels: 3.0
+    minimum_surface_depth_voxels: 1.5
+    breast_side_fraction: 0.52
+    minimum_orientation_confidence: 0.04
+    axial_edge_margin_fraction: 0.08
+    ftv_axial_edge_margin_fraction: 0.15
+    enhancement_percentile: 96.0
+    minimum_enhancement_z: 2.0
+    late_persistence_z: -0.5
+    min_component_voxels: 16
+    max_component_fraction: 0.08
+    max_component_axis_fraction: 0.48
+    max_components: 3
+    morphology_iterations: 1
+  augmentation:
+    enabled: true
+    flip_prob: 0.50
+    noise_prob: 0.15
+    noise_std: 0.015
+    scale_prob: 0.20
+    scale_range: [0.95, 1.05]
+    shift_prob: 0.20
+    shift_range: [-0.03, 0.03]
+    rotation_prob: 0.25
+    # PHASE-only independent DCE phase gain perturbation.
+    phase_scale_std: 0.02
+    auxiliary_scale_std: 0.05
+    auxiliary_shift_std: 0.03
+
+preprocessing:
+  source_manifest: /home/ubuntu/liuyiyao1/multimodal_dataset/phase_source_manifest_full_v4.csv
+  dataset_root: /home/ubuntu/liuyiyao1/multimodal_dataset
+  output_root: /home/ubuntu/liuyiyao1/multimodal_dataset/phase_preprocessed_64x128x128_anatomical_ftv
+  output_manifest: phase_manifest.csv
+  target_shape: [64, 128, 128]
+  max_phases: 8
+  modalities: [DCE, T1, T2, DWI, ADC]
+  baseline_only: true
+  foreground_crop: true
+  crop_margin: 8
+  motion_correction: true
+  maximum_translation_voxels: 12.0
+  normalization_lower_percentile: 0.5
+  normalization_upper_percentile: 99.5
+  output_clip: 8.0
+  workers: 4
+  overwrite: false
+  save_previews: true
+  preview_dpi: 140
+  fail_on_error: false
+  ftv_segmentation:
+    enabled: true
+    surface_depth_fraction: 0.20
+    minimum_surface_depth_voxels: 1.5
+    breast_side_fraction: 0.52
+    axial_edge_margin_fraction: 0.08
+    ftv_axial_edge_margin_fraction: 0.15
+    enhancement_percentile: 96.0
+    minimum_enhancement_z: 2.0
+    min_component_voxels: 16
+    max_component_fraction: 0.08
+    max_components: 3
+    morphology_iterations: 1
+
+data_visualization:
+  output_root: /home/ubuntu/liuyiyao/breast_pcr/src/breast_mri_ai/breast_dce_moe_pinn_phase/outputs/dataset_qc_64x128x128
+  samples_per_center: 2
+  maximum_samples: 20
+  figure_formats: [png]
+  figure_dpi: 220
+
+model:
+  feature_dim: 384
+  representation_dim: 128
+  base_channels: 32
+  temporal_depth: 2
+  temporal_heads: 8
+  temporal_mlp_ratio: 4.0
+  dropout: 0.20
+  max_phases: 8
+  domain_hidden_dim: 128
+  gradient_scale: 1.0
+  active_tasks: [pCR, HER2, ER, PR, HR, molecular_subtype, survival]
+  pretrain_projection_dim: 128
+  outside_anatomical_signal: 0.10
+  ftv_attention_bias: 1.5
+  kinetic_ftv_guidance: 2.0
+  modalities: [DCE, T1, T2, DWI, ADC]
+  auxiliary_base_channels: 16
+  mae_patch_size: [8, 16, 16]
+  spatial_patch_size: [4, 16, 16]
+  spatial_window_size: [4, 4, 4]
+  spatial_local_depth: 2
+  spatial_global_depth: 2
+  spatial_heads: 6
+  spatial_mlp_ratio: 3.0
+  patch_temporal_depth: 2
+  patch_temporal_heads: 8
+  patch_temporal_mlp_ratio: 2.0
+  patch_temporal_chunk_size: 1024
+  auxiliary_spatial_local_depth: 1
+  auxiliary_spatial_global_depth: 1
+  modality_moe_top_k: 2
+  modality_moe_hidden_ratio: 2.0
+  modality_dropout_probability: 0.15
+  task_moe_num_experts: 6
+  task_moe_top_k: 2
+  task_moe_hidden_ratio: 2.0
+  pinn_hidden_dim: 192
+  pinn_dropout: 0.10
+  pinn_ktrans_range: [0.001, 2.5]
+  pinn_ve_range: [0.02, 1.0]
+  pinn_vp_range: [0.0, 0.5]
+  pinn_maximum_bat_minutes: 3.0
+  classification_detach_pinn: true
+
+pretraining:
+  resume_path: null
+  epochs: 500
+  visit_selection: all
+  # DP batch size is global; keep the auxiliary stage compatible with the
+  # three-GPU topology when this config is used for ``--mode both``.
+  batch_size: 12
+  sampling_power: 0.5
+  modality_sampling_power: 0.20
+  data_parallel: false
+  num_workers: 0
+  prefetch_factor: null
+  persistent_workers: false
+  sample_load_threads: 8
+  # One prepared CPU shard batch overlaps the current step while keeping host
+  # memory bounded for the large multimodal 3-D packs.
+  host_prefetch_batches: 2
+  data_parallel_scatter_workers: 3
+  data_parallel_host_scatter: true
+  dp_gpu_prefetch: true
+  dp_pin_memory: false
+  dp_staging_minimum_free_memory_gb: 6.0
+  dp_staging_headroom: 1.25
+  cuda_prefetch: true
+  defer_cpu_batch_stack: true
+  timing_probe: true
+  timing_probe_interval: 20
+  pin_memory: false
+  drop_last: false
+  lr: 0.0002
+  backbone_lr_multiplier: 1.0
+  weight_decay: 0.01
+  scheduler:
+    name: warmup_cosine
+    warmup_epochs: 10
+    start_factor: 0.10
+    eta_min: 0.000005
+  early_stopping:
+    enabled: false
+    patience: 20
+    min_delta: 0.0001
+  grad_clip_norm: 1.0
+  amp: true
+  optimizer_foreach: true
+  optimizer_fused: true
+  mask_ratio: 0.60
+  view_augmentation:
+    flip_probability: 0.50
+    gain_std: 0.08
+    shift_std: 0.04
+    phase_gain_std: 0.025
+    modality_gain_std: 0.08
+    modality_shift_std: 0.04
+    noise_std: 0.015
+    phase_dropout_probability: 0.10
+  loss:
+    vicreg_weight: 0.05
+    vicreg_invariance: 25.0
+    vicreg_variance: 25.0
+    vicreg_covariance: 1.0
+    dce_voxel_mae_weight: 1.0
+    modality_voxel_mae_weight: 1.0
+    outside_anatomy_weight: 0.10
+    order_weight: 0.10
+    pinn_curve_weight: 1.0
+    pinn_ode_weight: 0.05
+    modality_moe_balance_weight: 0.02
+    modality_moe_entropy_weight: 0.001
+    domain_adversarial_weight: 0.08
+    style_domain_weight: 0.08
+    orthogonality_weight: 0.04
+
+# Fine-tuning requires a PHASE pretraining checkpoint; --mode both fills it automatically.
+training:
+  pretrained_checkpoint: /home/ubuntu/liuyiyao/breast_pcr/src/breast_mri_ai/breast_dce_moe_pinn_phase/outputs/breast_dce_moe_pinn_phase/pretrain/checkpoints/best_pretrain.pth
+  resume_path: null
+  allow_random_initialization: false
+  epochs: 500
+  # DP batch size is global; three GPUs retain the former total batch of 24.
+  batch_size: 72
+  sampling_power: 1.0
+  data_parallel: false
+  ddp_find_unused_parameters: true
+  ddp_gradient_as_bucket_view: true
+  ddp_bucket_cap_mb: 50
+  num_workers: 0
+  prefetch_factor: null
+  persistent_workers: false
+  sample_load_threads: 8
+  host_prefetch_batches: 2
+  data_parallel_scatter_workers: 3
+  data_parallel_host_scatter: true
+  dp_gpu_prefetch: true
+  dp_pin_memory: false
+  dp_staging_minimum_free_memory_gb: 6.0
+  dp_staging_headroom: 1.25
+  cuda_prefetch: true
+  defer_cpu_batch_stack: true
+  timing_probe: true
+  timing_probe_interval: 20
+  # Deferred DP packs remain pageable; recursive pinning of their tensor lists
+  # is unsafe on the current Blackwell/PyTorch runtime.
+  pin_memory: false
+  drop_last: true
+  lr: 0.0001
+  backbone_lr_multiplier: 0.10
+  weight_decay: 0.02
+  scheduler:
+    name: warmup_cosine
+    warmup_epochs: 5
+    start_factor: 0.10
+    eta_min: 0.00000005
+  early_stopping:
+    enabled: false
+    patience: 8
+    min_delta: 0.002
+  # Adapt temporal dynamics first, then tune the spatial Transformer at 0.1x LR.
+  head_warmup_epochs: 5
+  spatial_unfreeze_epoch: 16
+  train_audit_interval: 20
+  grad_clip_norm: 1.0
+  amp: true
+  optimizer_foreach: true
+  optimizer_fused: true
+
+loss:
+  task_weights: {pCR: 1.5, HER2: 1.5, ER: 1.0, PR: 1.0, HR: 1.0, molecular_subtype: 1.0, survival: 1.0}
+  binary_label_smoothing: 0.05
+  class_balance:
+    enabled: true
+    mode: sqrt_ratio
+    min_pos_weight: 0.25
+    max_pos_weight: 4.0
+  robust:
+    group_dro: {weight: 0.35, temperature: 0.20, min_group_samples: 1, start_epoch: 1, ramp_epochs: 6}
+    cross_center_contrastive: {weight: 0.15, temperature: 0.15, start_epoch: 6, ramp_epochs: 10}
+    class_conditional_alignment: {weight: 0.25, min_group_samples: 2, start_epoch: 6, ramp_epochs: 12}
+    domain_adversarial: {weight: 0.10, start_epoch: 6, ramp_epochs: 15}
+    style_domain: {weight: 0.04, start_epoch: 1, ramp_epochs: 5}
+    orthogonality: {weight: 0.04, start_epoch: 6, ramp_epochs: 10}
+    phenotype_compactness: {weight: 0.04, margin: 0.50, start_epoch: 6, ramp_epochs: 8}
+    pairwise_ranking: {weight: 0.20, maximum_pairs: 256, start_epoch: 1, ramp_epochs: 6}
+    prototype_separation: {weight: 0.02, start_epoch: 1, ramp_epochs: 4}
+    modality_moe_balance: {weight: 0.02, start_epoch: 1, ramp_epochs: 4}
+    modality_moe_entropy: {weight: 0.001, start_epoch: 1, ramp_epochs: 4}
+    task_moe_balance: {weight: 0.02, start_epoch: 1, ramp_epochs: 4}
+    task_moe_entropy: {weight: 0.001, start_epoch: 1, ramp_epochs: 4}
+
+performance:
+  # ddp: one process/GPU; dp: one process scatters a global batch; single: GPU 0.
+  parallel_mode: dp
+  cpu_num_threads: 8
+  cudnn_benchmark: true
+  allow_tf32: true
+
+evaluation:
+  threshold: 0.5
+  task_thresholds: {}
+  min_center_samples: 8
+  baseline:
+    pCR: {roc_auc: 0.612, accuracy: 0.603}
+    HER2: {roc_auc: 0.627, accuracy: 0.622}
+
+analysis:
+  visualization: true
+  # Rank zero serializes validation predictions/features at epoch 1, every 20
+  # epochs and the final epoch. The CPU-only worker exports PINN, routing,
+  # phenotype and outcome figures; an unfinished prior report is completed
+  # before the next boundary instead of being skipped.
+  analysis_interval: 20
+  pretraining_history_interval: 10
+  pretraining_validation_cases: 8
+  figure_formats: [png, svg]
+  figure_dpi: 300
+  # Test/inference exports include bootstrap CIs, calibration, decision curves,
+  # clinical impact and centre/timepoint subgroup tables.
+  bootstrap_samples: 160
+  bootstrap_stages: [test, infer_all, infer_test]
+  subgroup_columns: [dataset_id, visit_timepoint]
+  model_explanations: {enabled: true, maximum_cases: 4}
+  # Refine-compatible advanced statistical exports. These run in the existing
+  # CPU-only analysis worker at each analysis_interval and final test export.
+  refine_visualizations:
+    enabled: true
+    primary_task: pCR
+    bootstrap_samples: 160
+    # Runs one counterfactual forward pass per available auxiliary modality at
+    # analysis boundaries, then draws the refine-compatible ablation waterfall.
+    # DCE is excluded because it also drives the PINN feature branch.
+    modality_ablation: {enabled: true}
+
+inference:
+  checkpoint: null
+  split: test
+  batch_size: 1
+  num_workers: 0
+  persistent_workers: false
+  pin_memory: false
+  data_parallel: false
+  amp: true
+
+output:
+  root: /home/ubuntu/liuyiyao/breast_pcr/src/breast_mri_ai/breast_dce_moe_pinn_phase/outputs/breast_dce_moe_pinn_phase/finetune

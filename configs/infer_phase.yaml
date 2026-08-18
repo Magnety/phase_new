@@ -1,0 +1,150 @@
+# PHASE inference configuration aligned with the fine-tuning data/model shape.
+seed: 2026
+
+tasks:
+  active: [pCR, HER2, ER, PR, HR, molecular_subtype, survival]
+  molecular_subtype_classes: ["0", "1", "2", "3"]
+
+data:
+  manifest_path: /home/ubuntu/liuyiyao1/multimodal_dataset/phase_source_manifest_full_v4.csv
+  dataset_root: /home/ubuntu/liuyiyao1/multimodal_dataset
+  target_shape: [64, 128, 128]
+  spatial_preprocessing: trilinear_resample
+  preprocessed: false
+  max_phases: 8
+  modalities: [DCE, T1, T2, DWI, ADC]
+  relative_time_unit: seconds
+  default_phase_interval_seconds: 90.0
+  fallback_time_confidence: 0.35
+  normalization_mode: dce_cross_phase
+  normalization_samples: 262144
+  cache:
+    enabled: true
+    dir: /home/ubuntu/liuyiyao1/multimodal_dataset/.phase_independent_cache_64x128x128
+    sample_dir: /home/ubuntu/liuyiyao1/multimodal_dataset/.phase_independent_cache_64x128x128/samples
+    after_normalize: true
+    npy_mmap_mode: "r"
+    warmup_missing_before_training: true
+    warmup_log_interval: 10
+    warmup_workers: 4
+    warmup_timeout_hours: 24.0
+    minimum_free_gib: 5.0
+    migrate_legacy_cache: true
+  include_datasets: []
+  exclude_datasets: []
+  split_strategy:
+    mode: by_ratio
+    train_ratio: 0.70
+    val_ratio: 0.15
+    seed: 2026
+    stratify_train_val_only: true
+    stratify_by_dataset: true
+    stratify_task: pCR
+  ftv_segmentation:
+    enabled: true
+    surface_depth_fraction: 0.20
+    surface_min_depth_voxels: 3.0
+    minimum_surface_depth_voxels: 1.5
+    breast_side_fraction: 0.52
+    minimum_orientation_confidence: 0.04
+    axial_edge_margin_fraction: 0.08
+    ftv_axial_edge_margin_fraction: 0.15
+    enhancement_percentile: 96.0
+    minimum_enhancement_z: 2.0
+    late_persistence_z: -0.5
+    min_component_voxels: 16
+    max_component_fraction: 0.08
+    max_component_axis_fraction: 0.48
+    max_components: 3
+    morphology_iterations: 1
+
+model:
+  feature_dim: 384
+  representation_dim: 128
+  base_channels: 32
+  temporal_depth: 2
+  temporal_heads: 8
+  temporal_mlp_ratio: 4.0
+  dropout: 0.20
+  max_phases: 8
+  domain_hidden_dim: 128
+  gradient_scale: 1.0
+  active_tasks: [pCR, HER2, ER, PR, HR, molecular_subtype, survival]
+  pretrain_projection_dim: 128
+  outside_anatomical_signal: 0.10
+  ftv_attention_bias: 1.5
+  kinetic_ftv_guidance: 2.0
+  modalities: [DCE, T1, T2, DWI, ADC]
+  auxiliary_base_channels: 16
+  mae_patch_size: [8, 16, 16]
+  spatial_patch_size: [4, 16, 16]
+  spatial_window_size: [4, 4, 4]
+  spatial_local_depth: 2
+  spatial_global_depth: 2
+  spatial_heads: 6
+  spatial_mlp_ratio: 3.0
+  patch_temporal_depth: 2
+  patch_temporal_heads: 8
+  patch_temporal_mlp_ratio: 2.0
+  patch_temporal_chunk_size: 1024
+  auxiliary_spatial_local_depth: 1
+  auxiliary_spatial_global_depth: 1
+  modality_moe_top_k: 2
+  modality_moe_hidden_ratio: 2.0
+  modality_dropout_probability: 0.15
+  task_moe_num_experts: 6
+  task_moe_top_k: 2
+  task_moe_hidden_ratio: 2.0
+  pinn_hidden_dim: 192
+  pinn_dropout: 0.10
+  pinn_ktrans_range: [0.001, 2.5]
+  pinn_ve_range: [0.02, 1.0]
+  pinn_vp_range: [0.0, 0.5]
+  pinn_maximum_bat_minutes: 3.0
+  classification_detach_pinn: true
+
+# Kept for refine-style configuration symmetry. In inference mode the
+# inference section below overrides these loader values.
+training:
+  batch_size: 1
+  num_workers: 0
+  persistent_workers: false
+  pin_memory: false
+  data_parallel: false
+  amp: true
+
+performance:
+  # Inference defaults to one GPU; set dp to scatter batches across visible GPUs.
+  parallel_mode: single
+  cpu_num_threads: 1
+  cudnn_benchmark: true
+  allow_tf32: true
+
+evaluation:
+  threshold: 0.5
+  task_thresholds: {}
+  min_center_samples: 8
+  baseline:
+    pCR: {roc_auc: 0.612, accuracy: 0.603}
+    HER2: {roc_auc: 0.627, accuracy: 0.622}
+
+analysis:
+  visualization: true
+  figure_formats: [png]
+  figure_dpi: 300
+  model_explanations:
+    enabled: true
+    maximum_cases: 4
+
+inference:
+  checkpoint: null
+  split: test
+  batch_size: 1
+  num_workers: 0
+  persistent_workers: false
+  pin_memory: false
+  data_parallel: false
+  amp: true
+
+output:
+  root: /home/ubuntu/liuyiyao/breast_pcr/src/breast_mri_ai/breast_dce_moe_pinn_phase/outputs/breast_dce_moe_pinn_phase/infer
